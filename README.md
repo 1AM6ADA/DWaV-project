@@ -169,7 +169,6 @@ Contains mock data for development. Will be replaced with real World Values Surv
 
 
 
-Here's the same content in English for your README.md:
 
 ---
 
@@ -177,183 +176,57 @@ Here's the same content in English for your README.md:
 
 ### 1. Download Data from WVS Website
 
-The next stage is downloading the source files from the World Values Survey website. A hybrid approach is used for this:
+The next stage involves downloading the source files from the World Values Survey website. A approach will be used for this task:
 
-```python
-# Example code for downloading files
-import requests
-import os
+- **Manual step:** Obtain direct download links by navigating through the website after registration
+- **Automated step:** Use these links to programmatically download all necessary files
+- **Storage:** Save all downloaded files in a dedicated `data/raw` directory
 
-# Direct links to files (to be added after manual retrieval)
-urls = [
-    "https://www.worldvaluessurvey.org/.../WVS_Trend_1981_2022_v4.1.zip",
-    # Other links will be added here
-]
-
-download_folder = 'data/raw'
-os.makedirs(download_folder, exist_ok=True)
-
-for url in urls:
-    filename = url.split('/')[-1]
-    print(f"Downloading: {filename}")
-    response = requests.get(url, stream=True)
-    with open(os.path.join(download_folder, filename), 'wb') as f:
-        for chunk in response.iter_content(8192):
-            f.write(chunk)
-    print(f"✓ {filename} downloaded")
-```
+The downloaded files will include survey data in various formats (Stata .dta, SPSS .sav, or CSV), along with accompanying documentation and codebooks.
 
 ### 2. Parse the Downloaded Data
 
-After downloading, the files need to be parsed — extracting structured data and converting it into a workable format.
+Once the files are downloaded, they need to be parsed — meaning extracting the structured data and converting it into a workable format for analysis:
 
-```python
-import pandas as pd
-import zipfile
-
-# Unzip files
-with zipfile.ZipFile('data/raw/WVS_Trend_1981_2022_v4.1.zip', 'r') as zip_ref:
-    zip_ref.extractall('data/raw/')
-
-# Load data into pandas (format depends on file type)
-# For Stata (.dta)
-df = pd.read_stata('data/raw/WVS_Trend_1981_2022_v4.1.dta')
-
-# For SPSS (.sav)
-# df = pd.read_spss('data/raw/WVS_Trend_1981_2022_v4.1.sav')
-
-# For CSV
-# df = pd.read_csv('data/raw/WVS_Trend_1981_2022_v4.1.csv')
-
-print(f"Rows loaded: {len(df)}")
-print(f"Columns loaded: {len(df.columns)}")
-```
+- **Extract archives:** Unzip any compressed files to access the raw data
+- **Load into pandas:** Import the data from its original format (Stata, SPSS, or CSV) into a pandas DataFrame
+- **Initial inspection:** Check basic information about the dataset — number of rows, columns, and data types
+- **Handle encoding:** Ensure proper text encoding for international survey responses
 
 ### 3. Systematize Data into JSON Files
 
-The next important step is transforming the parsed data into structured JSON files for convenient use in further analysis.
+The most important step is transforming the parsed data into structured JSON files. JSON (JavaScript Object Notation) is chosen because it's:
 
-```python
-import json
-import numpy as np
+- **Human-readable:** Easy to inspect and understand
+- **Language-independent:** Can be used with any programming language
+- **Hierarchical:** Can represent complex nested structures
+- **Web-friendly:** Easily consumed by web applications and APIs
 
-def convert_to_json(df, output_file='data/processed/wvs_data.json'):
-    """
-    Convert DataFrame to JSON with proper structure
-    """
-    # Create output directory
-    os.makedirs('data/processed', exist_ok=True)
-    
-    # Handle special data types for JSON serialization
-    def handle_special_types(obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif pd.isna(obj):
-            return None
-        return obj
-    
-    # Convert DataFrame to list of dictionaries
-    records = df.to_dict(orient='records')
-    
-    # Process each record
-    processed_records = []
-    for record in records:
-        processed_record = {}
-        for key, value in record.items():
-            processed_record[key] = handle_special_types(value)
-        processed_records.append(processed_record)
-    
-    # Create JSON structure
-    json_data = {
-        "metadata": {
-            "source": "World Values Survey",
-            "version": "v4.1",
-            "wave": "1981-2022 Trend",
-            "total_respondents": len(df),
-            "total_variables": len(df.columns),
-            "export_date": "2024-01-15"
-        },
-        "variables": list(df.columns),
-        "data": processed_records
-    }
-    
-    # Save to JSON
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(json_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"JSON file saved: {output_file}")
-    print(f"File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB")
+The systematization process will include:
 
-# Run conversion
-convert_to_json(df)
-```
+- **Metadata creation:** Adding information about the data source, version, wave, and export date
+- **Variable listing:** Documenting all available variables in the dataset
+- **Data conversion:** Transforming the tabular data into JSON format while handling special data types (like integers, floats, and null values)
+- **File organization:** Saving the complete dataset as a structured JSON file
 
 ### 4. Create Categorized JSON Files
 
-For analysis convenience, the data can be split into multiple thematic JSON files:
+For more convenient analysis, the data will be split into multiple thematic JSON files. This categorization makes it easier to work with specific aspects of the survey without loading the entire dataset:
 
-```python
-def create_categorized_json(df):
-    """
-    Split data into categories and save as separate JSON files
-    """
-    
-    # Example categories for WVS
-    categories = {
-        "demographics": ["country", "gender", "age", "education", "income"],
-        "values": ["trust", "religion", "politics", "family"],
-        "wellbeing": ["happiness", "life_satisfaction", "health"],
-        "country_stats": ["country", "gdp", "population"]
-    }
-    
-    def handle_special_types(obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif pd.isna(obj):
-            return None
-        return obj
-    
-    for category_name, columns in categories.items():
-        # Select only existing columns
-        existing_cols = [col for col in columns if col in df.columns]
-        
-        if existing_cols:
-            category_df = df[existing_cols].copy()
-            
-            # Convert to JSON
-            records = category_df.to_dict(orient='records')
-            
-            # Process records
-            processed_records = []
-            for record in records:
-                processed_record = {}
-                for key, value in record.items():
-                    processed_record[key] = handle_special_types(value)
-                processed_records.append(processed_record)
-            
-            # Save
-            output_file = f'data/processed/wvs_{category_name}.json'
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(processed_records, f, indent=2, ensure_ascii=False)
-            
-            print(f"Created file: {output_file}")
+- **Demographics file:** Contains respondent characteristics like country, gender, age, education, and income
+- **Values file:** Includes questions about trust, religion, politics, and family values
+- **Wellbeing file:** Covers happiness, life satisfaction, and health-related questions
+- **Country statistics file:** Aggregates data at the country level
 
-# Run
-create_categorized_json(df)
-```
+Each file will contain only relevant variables, making them smaller and more focused for specific analytical tasks.
+
+
 ### Summary
-The next step includes:
 
- - Downloading files from the WVS website (manual link retrieval + automated downloading)
+The next phase encompasses three main activities:
 
- - Parsing the downloaded data (extracting from .dta/.sav/.csv formats)
+1. **Downloading** files from the WVS website — a combination of manual link retrieval and automated downloading
+2. **Parsing** the downloaded data — extracting from original formats (.dta, .sav, .csv) into a workable DataFrame
+3. **Systematizing** into JSON files — creating a structured, categorized representation of the data
 
- - Systematizing into JSON files (creating structured representation)
+Upon completion of these steps, the World Values Survey data will be transformed from raw downloadable files into a well-organized, documented, and easily accessible JSON format, ready for subsequent analysis and visualization tasks.
