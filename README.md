@@ -176,12 +176,6 @@ Contains mock data for development. Will be replaced with real World Values Surv
 
 ### 1. Download Data from WVS Website
 
-The next stage involves downloading the source files from the World Values Survey website. A approach will be used for this task:
-
-- **Manual step:** Obtain direct download links by navigating through the website after registration
-- **Automated step:** Use these links to programmatically download all necessary files
-- **Storage:** Save all downloaded files in a dedicated `data/raw` directory
-
 The downloaded files will include survey data in various formats (Stata .dta, SPSS .sav, or CSV), along with accompanying documentation and codebooks.
 
 ### 2. Parse the Downloaded Data
@@ -202,18 +196,11 @@ The most important step is transforming the parsed data into structured JSON fil
 - **Hierarchical:** Can represent complex nested structures
 - **Web-friendly:** Easily consumed by web applications and APIs
 
-The systematization process will include:
-
-- **Metadata creation:** Adding information about the data source, version, wave, and export date
-- **Variable listing:** Documenting all available variables in the dataset
-- **Data conversion:** Transforming the tabular data into JSON format while handling special data types (like integers, floats, and null values)
-- **File organization:** Saving the complete dataset as a structured JSON file
 
 ### 4. Create Categorized JSON Files
 
 For more convenient analysis, the data will be split into multiple thematic JSON files. This categorization makes it easier to work with specific aspects of the survey without loading the entire dataset:
 
-- **Demographics file:** Contains respondent characteristics like country, gender, age, education, and income
 - **Values file:** Includes questions about trust, religion, politics, and family values
 - **Wellbeing file:** Covers happiness, life satisfaction, and health-related questions
 - **Country statistics file:** Aggregates data at the country level
