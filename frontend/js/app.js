@@ -70,6 +70,8 @@ const App = (() => {
     selectedCountry: null,
     compareCountries: [],
     mapData: {},
+    eventsPayload: null,
+    selectedEventType: '',
   };
 
   // ── API ────────────────────────────────────────────────────
@@ -82,6 +84,7 @@ const App = (() => {
   // ── Init ───────────────────────────────────────────────────
   async function init() {
     try {
+      setupIntroOverlay();
       const [countries, themes, waves] = await Promise.all([
         api('/countries'), api('/themes'), api('/waves'),
       ]);
@@ -116,6 +119,19 @@ const App = (() => {
       console.error('Init failed:', err);
       document.getElementById('loading-spinner').textContent = 'Failed to load data. Is the backend running?';
     }
+  }
+
+  function setupIntroOverlay() {
+    const overlay = document.getElementById('intro-overlay');
+    const enterBtn = document.getElementById('intro-enter-btn');
+    const openBtn = document.getElementById('open-intro-btn');
+    if (!overlay || !enterBtn || !openBtn) return;
+
+    const closeIntro = () => overlay.classList.add('hidden');
+    const openIntro = () => overlay.classList.remove('hidden');
+
+    enterBtn.addEventListener('click', closeIntro);
+    openBtn.addEventListener('click', openIntro);
   }
 
   // ── Controls ───────────────────────────────────────────────
@@ -292,6 +308,12 @@ const App = (() => {
         Compare.addCountry(state.selectedCountry);
       }
     });
+
+    const typeFilter = document.getElementById('events-type-filter');
+    typeFilter.addEventListener('change', (e) => {
+      state.selectedEventType = e.target.value || '';
+      renderEventsFromState();
+    });
   }
 
   async function updateDetail(cc) {
@@ -314,6 +336,117 @@ const App = (() => {
       Charts.updateDistribution({});
       document.getElementById('dist-title').textContent = 'No distribution data';
     }
+
+    // Historical events for selected wave (or latest available)
+    await updateEvents(cc, wave);
+  }
+
+  async function updateEvents(cc, selectedWave) {
+    const eventsTitle = document.getElementById('events-title');
+    const query = selectedWave ? `?wave=${selectedWave}&limit=24` : '?limit=24';
+
+    try {
+      const payload = await api(`/events/${cc}${query}`);
+      state.eventsPayload = payload;
+      const waveNum = payload?.wave;
+      const waveLabel = waveNum ? state.waves[String(waveNum)] : null;
+      eventsTitle.textContent = waveNum
+        ? `Historical Events (Wave ${waveNum}${waveLabel ? `, ${waveLabel}` : ''})`
+        : 'Historical Events';
+
+      populateEventTypeFilter(payload?.event_types || []);
+      renderEventsFromState();
+    } catch (err) {
+      console.error('Events loading failed:', err);
+      eventsTitle.textContent = 'Historical Events';
+      state.eventsPayload = null;
+      populateEventTypeFilter([]);
+      renderEventsFromState();
+    }
+  }
+
+  function populateEventTypeFilter(types) {
+    const filter = document.getElementById('events-type-filter');
+    const current = state.selectedEventType;
+    const unique = [...new Set((types || []).filter(Boolean))];
+    filter.innerHTML = `<option value="">All event types</option>` + unique
+      .map(t => `<option value="${escapeHtml(t)}">${escapeHtml(String(t).replaceAll('_', ' '))}</option>`)
+      .join('');
+
+    if (current && unique.includes(current)) {
+      filter.value = current;
+    } else {
+      state.selectedEventType = '';
+      filter.value = '';
+    }
+  }
+
+  function renderEventsFromState() {
+    const eventsList = document.getElementById('events-list');
+    const payload = state.eventsPayload;
+    if (!payload) {
+      eventsList.innerHTML = '<div class="event-empty">No historical events found for this selection.</div>';
+      return;
+    }
+    const selectedType = state.selectedEventType;
+    const filterByType = (arr) => (arr || []).filter(evt =>
+      !selectedType || String(evt?.event_type || '') === selectedType
+    );
+    renderEventsList(eventsList, filterByType(payload?.events), filterByType(payload?.global_events));
+  }
+
+  function renderEventsList(container, countryEvents, globalEvents) {
+    if ((!countryEvents || countryEvents.length === 0) && (!globalEvents || globalEvents.length === 0)) {
+      container.innerHTML = '<div class="event-empty">No historical events found for this selection.</div>';
+      return;
+    }
+
+    const countryItems = (countryEvents || []).map(evt => eventHtml(evt, false)).join('');
+    const globalItems = (globalEvents || []).map(evt => eventHtml(evt, true)).join('');
+
+    container.innerHTML = `
+      ${countryItems || ''}
+      ${globalItems ? `<div class="event-group-label">Global wave context</div>${globalItems}` : ''}
+    `;
+  }
+
+  function eventHtml(evt, isGlobal) {
+    const date = formatEventDate(evt?.year, evt?.month, evt?.day);
+    const title = escapeHtml(evt?.title || evt?.description || 'Untitled event');
+    const rawType = evt?.event_type ? String(evt.event_type).replaceAll('_', ' ') : 'event';
+    const type = escapeHtml(rawType);
+    const source = evt?.source ? ` · ${escapeHtml(evt.source)}` : '';
+    const globalBadge = isGlobal ? '<span class="event-badge">Global</span>' : '';
+
+    return `
+      <div class="event-item">
+        <div class="event-head">
+          <span class="event-date">${date}</span>
+          <span class="event-type">${type}</span>
+          ${globalBadge}
+        </div>
+        <div class="event-title">${title}</div>
+        <div class="event-meta">${source}</div>
+      </div>
+    `;
+  }
+
+  function formatEventDate(year, month, day) {
+    if (!year) return 'Unknown date';
+    const mm = Number(month);
+    const dd = Number(day);
+    if (!mm || !dd) return `${year}`;
+    const date = new Date(Date.UTC(Number(year), mm - 1, dd));
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
   }
 
   // ── Public ─────────────────────────────────────────────────
